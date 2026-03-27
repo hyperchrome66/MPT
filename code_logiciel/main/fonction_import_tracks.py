@@ -21,6 +21,7 @@ from fonctions_MPT import (
    gyradius, 
    alphaCoeff, 
    asp_ratio,
+   complex_modulusFFT
    )
 
         
@@ -89,14 +90,14 @@ def import_tracks(name):
         ngap= sum(np.isnan(x)) #somme du nombre de sauts de frames 
         
         #CALCUL DU MSD 
-        #Appel des fonctions MSD2, alphaCoeff, diffCoeff, gyradius, asp_ratio
+        #Appel des fonctions MSD2, alphaCoeff, diffCoeff, gyradius, asp_ratio, complex_modulus_FFT
         msd2D = MSD2(x,y); 
         alpha2 = alphaCoeff(msd2D);        
         slope, err2 = diffCoeff(dt, msd2D); 
         D2 = slope/4; #diffusion à 2 dimensions 
         gyr = gyradius(x,y,z);
         aspect_ratio, lambda_1, lambda_2 = asp_ratio(x, y)
-        
+
         #alphaTime, DeffTime = MSDtime(msd3D, dt, 10)  # sliding window fit alpha dn Deff (3D only)
 
         #CREATION D'UN DICO POUR LA PARTICULE SI NOMBRE DE POSITIONS > 5 

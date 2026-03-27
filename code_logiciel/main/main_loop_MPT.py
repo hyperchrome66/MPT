@@ -20,6 +20,9 @@ from fonctions_MPT import (
    driftCorrectTrack,
    plotAlphaDeff,
    asp_ratio,
+   filter_tracks_by_lambda, 
+   mean_MSD_filtered, 
+   complex_modulusFFT
    )
 from fonction_import_tracks import import_tracks
 from plot_analysis import plot_msd, plot_XYprojection, plot_alpha_multiple, diffusion_plot_multiple, diffusion_plot_BT_LN
@@ -121,8 +124,42 @@ for i, movie in enumerate(data):
     movie["lambda_2"] = np.array([trk["lambda_2"] for trk in tracks.values()]);
 
 data=MSDinterp(data)    
-print('flag2')
 
+#Selecting tracks, lambda_1 > SIZE OF PIXEL (LAMBDA MIN = 0.2)
+for movie in data: #equivalent to data[i]
+    filtered_tracks = filter_tracks_by_lambda(movie["tracks"], lambda_min=0.22) #call of the filter function
+    
+    movie["D2_filtered"]           = np.array([trk["D2"]           for trk in filtered_tracks.values()])
+    movie["alpha2_filtered"]       = np.array([trk["alpha2"]       for trk in filtered_tracks.values()])
+    movie["aspect_ratio_filtered"] = np.array([trk["aspect_ratio"] for trk in filtered_tracks.values()])
+    movie["lambda_1_filtered"]     = np.array([trk["lambda_1"]     for trk in filtered_tracks.values()])
+    movie["lambda_2_filtered"]     = np.array([trk["lambda_2"]     for trk in filtered_tracks.values()])
+    movie["numTracks_filtered"]    = len(filtered_tracks)
+# MSD2D de chaque trajectoire filtrée → shape (N_filtered, 499)
+      # MSD2D avec padding NaN pour trajectoires de longueurs différentes
+    MSD_list = [trk["MSD2D"] for trk in filtered_tracks.values()]
+    
+    
+    max_len = max(len(m) for m in MSD_list)
+    MSD_padded = np.full((len(MSD_list), max_len), np.nan)
+    for j, m in enumerate(MSD_list):
+        MSD_padded[j, :len(m)] = m
+    movie["MSD2Dmat_filtered"] = MSD_padded  # shape (N_filtered, max_len)
+    movie["MSD2Dmean_filtered"] = mean_MSD_filtered(movie) #en um^2 
+    movie["MSD2Dmean_filtered_m2"]  = movie["MSD2Dmeanfiltered"] * 1e-12  # en m²
+    
+    #Computation  of G_elastic and G_loss after filter 
+    MSD_filteredmean = movie["MSD2Dmeanfiltered_m2"] #array
+    MSD_filteredmean = MSD_filteredmean[:168]
+    dt = movie["dt"]
+    
+    omega, G_elastic, G_visc = complex_modulusFFT(MSD_filteredmean, dt, a=0.51e-6)
+    
+    movie["omega"] = omega
+    movie["G_elastic"] = G_elastic
+    movie["G_viscous"] = G_visc
+
+print('flag2')
 
 # %% -- ANALYSIS // PLOTS -- 
 

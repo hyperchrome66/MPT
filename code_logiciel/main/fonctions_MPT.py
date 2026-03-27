@@ -15,6 +15,9 @@ from scipy.interpolate import interp1d # Import interp1d
 """
 
 #CALCUL DU MSD 
+""" x and y are in um 
+    m : MSD in um^2
+"""
 def MSD2(x,y):
     x=np.array(x);
     y=np.array(y);
@@ -223,13 +226,139 @@ def asp_ratio(x,y):
     return aspect_ratio, lambda_1, lambda_2
 
 
+#Filtering tracks, keeping only the tracks lambda_1 > 0.22 um (size of pixel)
+def filter_tracks_by_lambda(tracks, lambda_min=0.22):
+    """
+    Filtre les tracks d'un movie où lambda_1 > lambda_min.
+    
+    Paramètres :
+        tracks : dictionnaire de tracks (issu de import_tracks)
+        lambda_min : seuil sur lambda_1 (défaut = 0.22)
+    
+    Retourne :
+        filtered_tracks : sous-dictionnaire des tracks filtrés
+    """
+    filtered_tracks = {
+        key: trk for key, trk in tracks.items()
+        if trk["lambda_1"] > lambda_min
+    }
+    return filtered_tracks
+
+def complex_modulusFFT(msd, dt, a):
+    """
+    Compute G′ and G″ from MSD using GSER.
+
+    Parameters:
+    - msd: array of mean squared displacement vs. lag time (m^2)
+    - dt: time step between trajectory points (s)
+    - a: particle radius (m)
+    - T: temperature (K)
+
+    Returns:
+    - freqs: frequency array
+    - G_elas: storage modulus
+    - G_visc: loss modulus
+    
+    Use: 
+        
+    omega, G_elas, G_visc = complex_modulusFFT(msd, dt, a):
+    plt.plot(omega, G1)
+    
+    
+    """
+    kB = 1.380649e-23  # Boltzmann constant
+    T = 310 # 37 celsius
+    N = len(msd)
+
+
+    # # One-sided FT of MSD: integrate from 0 to inf
+    # # rfft gives the non-negative frequency components
+    #MSD after FT : from msd(lag_time)^2 to msd(omega)^2 
+    msd_ft = np.fft.rfft(msd) * dt        # one-sided FT (scaled by dt)
+    freqs  = np.fft.rfftfreq(N, d=dt)
+
+    # Avoid division by zero at DC (freq=0)
+    omega = 2 * np.pi * freqs[1:] #avoids index 0, starts at 1  
+    msd_ft = msd_ft[1:]
+
+    # GSER in Fourier space: G*(ω) = kT / (πa · iω · F(MSD)(ω))
+    
+    Gstar = kB * T / (np.pi * a * 1j * omega * msd_ft)
+
+    G_elas = Gstar.real   # storage modulus
+    G_visc = Gstar.imag   # loss modulus
+    return omega, G_elas, G_visc
+
+
+def complex_modulusLT(msd, dt, a, degree=5):
+    """
+    Fit MSD with a polynomial, then analytically Laplace transform it.
+    Compute G*(s) from the Laplace-transformed MSD.
+
+    Parameters:
+    - t: time array
+    - msd: mean squared displacement array
+    - a: radius of the particle    
+    - degree: degree of the polynomial fit
+
+    Returns:
+    - s: Laplace variable
+    - msd_laplace: Laplace transform of the fitted MSD
+    - G_star_laplace: complex modulus in Laplace domain
+
+    Parameters:
+    - s: Laplace variable
+    - msd_laplace: Laplace transform of MSD
+    - a: particle radius (m)
+    - T: temperature (K)
+    """
+    # Fit MSD with a polynomial
+    N = len(msd)
+    t = dt*np.arange(N)
+    coeffs = np.polyfit(t, msd, degree)
+    poly = np.poly1d(coeffs)
+
+    # Define symbolic variables
+    tau, s = sym.symbols('tau s', real=True, positive=True)
+
+    # Construct the polynomial symbolically
+    poly_sym = 0
+    for i, c in enumerate(coeffs):
+        poly_sym += c * tau**i
+
+    # Analytically Laplace transform the polynomial
+    msd_laplace = sym.laplace_transform(poly_sym, tau, s, noconds=True)
+
+     
+    kB = 1.380649e-23  # Boltzmann constant
+    T = 310 # 37 Celsius    
+    G_star_laplace = (kB * T) / (np.pi * a * s * msd_laplace)
+    
+    
+    # Prepare arrays for G' and G''
+    mid = np.int32(N/2)
+    freqs = fftfreq(N, dt)
+    omega = 2 * np.pi * freqs
+    omega = omega[1:mid]
+    G1 = np.zeros_like(omega)
+    G2 = np.zeros_like(omega)
+
+    for i, w in enumerate(omega):
+        # Substitute s = i*w
+        G_star_iw = G_star_laplace.subs(s, 1j*w)
+        # Extract real and imaginary parts
+        G1[i] = sym.re(G_star_iw)
+        G2[i] = -sym.im(G_star_iw)  # Note the minus sign for G''
+
+    return omega, G1, G2
+
+
+
 #Filtre : seuillage 
 """ Permet de filtrer les points dans les data qui sont en dessous d'un certain seuil du MSD 
 """
 def thrsh_MSD(MSD2Dmat) :
-    mask_MSD = MSD2Dmat > 1e-10
-    
-    
+    mask_MSD = MSD2Dmat > 1e-1
 
 
 # this increases the window
@@ -247,6 +376,20 @@ def MSDtime2(msd, dt, step=5):
         Deff[i] = np.exp(intercept)
         alpha[i] = slope
     return alpha, Deff
+
+def mean_MSD_filtered(movie):
+    """Computes the mean MSD of all the filtered tracks
+    
+    Paramètres :
+        movie : dictionnaire contenant "MSD2Dmat_filtered" de shape (N_filtered, max_len)
+    
+    Retourne :
+        MSD_mean : array de shape (max_len,) — moyenne sur les trajectoires, ignore les NaN
+
+    """
+    MSD_mean_alltr = np.nanmean(movie["MSD2Dmat_filtered"], axis=0)
+    
+    return MSD_mean_alltr
 
 
 def plotAlphaDeff(alpha, msd, Deff,step=5):

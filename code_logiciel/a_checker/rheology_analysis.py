@@ -18,6 +18,8 @@ from scipy.stats import binned_statistic
 from scipy.fft import fft, fftfreq
 import sympy as sym
 
+#%% 
+
 
 def complex_modulusFFT(msd, dt, a):
     """
@@ -62,6 +64,9 @@ def complex_modulusFFT(msd, dt, a):
     G1 = Gstar.real   # storage modulus
     G2 = Gstar.imag   # loss modulus
     return omega, G1, G2
+
+#%% 
+
 
 
 # Kramer Kronig control

@@ -519,6 +519,113 @@ def stripplot_diffusion_BT(data):
     plt.tight_layout()
     plt.show()
     
+    
+
+    
+   #%% DIFFUSION PLOT MULTIPLE MELANGE ZONE B/ZONE T FILTERED 
+
+def diffusion_plot_BT_LN_filtered(data):
+
+    all_diffcoeff = []
+    all_labels = []
+    all_median = []
+    all_colors = []
+
+    palette_B = sns.color_palette("Purples", n_colors=10)
+    palette_T = sns.color_palette("Greens", n_colors=10)
+
+    # Sort data : by LN number then by zone
+    def extract_ln_number(d):
+        return int(d["LN"].replace("LN", ""))
+
+    data_sorted = sorted(data, key=lambda x: (x["zone"], extract_ln_number(x)))
+
+    idx_B, idx_T = 0, 0
+
+    # Make lists : 
+    for d in data_sorted:
+
+        diffcoeff = np.array(d["D2_filtered"])
+
+
+        name = d["name"].replace(".csv", "")
+        name = "_".join(name.split("_")[1:])
+
+        all_diffcoeff.append(diffcoeff)
+        all_labels.append(name)
+
+        if d["zone"] == "B":
+            all_colors.append(palette_B[idx_B % len(palette_B)])
+            idx_B += 1
+        else:
+            all_colors.append(palette_T[idx_T % len(palette_T)])
+            idx_T += 1
+
+    plt.figure(figsize=(14, 6), dpi=150)
+
+    # Violin plots
+    sns.violinplot(
+        data=all_diffcoeff,
+        inner="box",
+        palette=all_colors,
+        linewidth=1
+    )
+
+    #Stripplot
+    sns.stripplot(
+        data=all_diffcoeff,
+        jitter=True,
+        color="black",
+        size=3,
+        alpha=0.5
+    )
+
+    plt.ylim(auto=True)
+
+    # Medians
+    global_max = max([np.max(d) for d in all_diffcoeff])
+    global_min = min([np.min(d) for d in all_diffcoeff])
+
+    for j, diffcoeff in enumerate(all_diffcoeff):
+        median_diff = np.median(diffcoeff)
+        all_median.append(median_diff)
+
+        plt.text(
+            j,
+            global_max + 0.05*(global_max - global_min),
+            f"{median_diff:.2f}",
+            ha='center',
+            va='bottom',
+            fontsize=8,
+            color='red',
+            fontweight='bold'
+        )
+
+    # B/T zone separation
+    n_B = sum(1 for d in data_sorted if d["zone"] == "B")
+    plt.axvline(n_B - 0.5, color='black', linestyle='--')
+
+    # Short labels
+    plt.xticks(
+        ticks=np.arange(len(all_labels)),
+        labels=[label[:10] + "..." if len(label) > 10 else label for label in all_labels],
+        rotation=25,
+        fontsize=8
+    )
+
+    # Titles
+    plt.text(n_B/2 - 0.5, global_max*1.15, "Zone B", ha='center', fontsize=12)
+    plt.text(n_B + (len(all_labels)-n_B)/2 - 0.5, global_max*1.15, "Zone T", ha='center', fontsize=12)
+
+    plt.ylabel("Coefficient diff (um^2/s)")
+    plt.title("Distribution de D dans la zone B et T")
+    plt.xlabel("")
+
+    plt.tight_layout()
+    plt.show()
+
+    print(all_median)
+    
     #%% STRIPPLOT ZONE B VS ZONE T : MOYENNES 
     
 def stripplot_moyenne_diffusion(data):
@@ -633,7 +740,105 @@ def correlation_alpha_diff(data):
 
     print(f"Pearson r = {r}")
     print(f"p-value = {p_value}")
+    
+    
+    #%% MSD filtered 
+    
+    def plot_msd_filtered(data):
+
+            i = 0
+
+            fig, ax = plt.subplots(1, 2, layout='constrained')
+
+            m = data[i]["MSD2Dmat_filtered"]
+            t = data[i]["dt"] * np.arange(1, m.shape[1] + 1) 
+            name = data[i]["name"]
+            
+            mask = t <= 5
+            t_cut = t[mask]
+            m_cut = m[:, mask] 
+
+            fig.suptitle(name)
+
+            # MSD vs time
+            ax[0].plot(t_cut, m_cut.T)
+            ax[0].set_xlabel("Time (sec)")
+            ax[0].set_ylabel("MSD (um^2)")
+            ax[0].set_title("MSD over time")
+
+            # log-log MSD
+            ax[1].plot(t[1:], m.T[1:]) #0 element is deleted since it is a log plot
+            ax[1].set_xscale("log")
+            ax[1].set_yscale("log")
+            ax[1].set_xlabel("log Time (sec)")
+            ax[1].set_ylabel("log MSD")
+            ax[1].set_title("Log-Log")
+
+            plt.show()
+            
+            
+    #%% MSD MEAN FILTERED 
        
+def mean_MSD_time(data) : 
+       
+    for i in range(len(data)): 
+        m = data[i]["MSD2Dmeanfiltered"]
+        t = data[i]    
+        
+    
+    #%% diffusion D en fonction de lambda 
+    
+    i = 0 #file index 
+    diffusion_D = np.array(data[i]["D2"])
+    lambda_values = np.array(data[i]["lambda_1"])
+    mask = lambda_values > 0.22 #displacement of particled > size of the pixel 
+    lambda_filtered = lambda_values[mask]
+    diffusion_D_filtered = diffusion_D[:, mask] if diffusion_D.ndim == 2 else diffusion_D[mask]
+    
+    plt.scatter(lambda_filtered, diffusion_D_filtered.T)
+    
+    
+    #%% diffusion D en fonction de lambda 
+    
+    i = 0 #file index 
+    diffusion_D = np.array(data[i]["D2_filtered"])
+    lambda_values = np.array(data[i]["lambda_1_filtered"])
+    
+    plt.scatter(lambda_filtered, diffusion_D_filtered.T)
+    
+    #%% SCATTERPLOT G' and G''
+    
+
+i = 0
+viscoel_modulus = data[i]["G_elastic"]
+
+# Création d'un DataFrame pour seaborn
+df = pd.DataFrame({"G_elastic": viscoel_modulus})
+
+fig, ax = plt.subplots()
+
+# Violin plot + strip plot (points individuels) + médiane
+sns.violinplot(data=df, y="G_elastic", ax=ax, inner="quart")  # inner="quart" affiche médiane + quartiles
+sns.stripplot(data=df, y="G_elastic", ax=ax, color="black", alpha=0.3, size=3)  # points individuels
+
+ax.set_yscale("log")
+ax.set_ylabel("G' (Pa)")
+ax.set_title(data[i]["name"])
+plt.show()
+    
+    #%%% Représentation graphique G et fréquence Hz (GRAPH SUREMENT FAUX)
+    
+    i = 4 #index of the file  
+    
+    viscoel_modulus = data[i]["G_elastic"]
+    omega_list = data[i]["omega"]
+    freq = omega_list / (2 * np.pi)
+    
+    plt.plot(freq, viscoel_modulus)
+    plt.yscale("log")
+    plt.xlabel("Frequency (Hz)")
+    plt.ylabel("log G' in Pa (verify)")
+    
  #%% PLOT NOMBRE DE POINTS ET RAYON DE GYRATION PAR TRAJECTOIRE 
 
 #file index
