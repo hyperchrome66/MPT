@@ -14,6 +14,7 @@ import pickle
 from pathlib import Path
 import matplotlib.pyplot as plt
 #from scipy.interpolate import interp1d  # Import interp1d
+from numerical_LT import numerical_LT_TEST
 from fonctions_MPT import (
    extract_matrix,
    MSDinterp, 
@@ -22,10 +23,20 @@ from fonctions_MPT import (
    asp_ratio,
    filter_tracks_by_lambda, 
    mean_MSD_filtered, 
-   complex_modulusFFT
+   complex_modulusFFT, 
+   complex_modulusLT,
+   numerical_LT
    )
 from fonction_import_tracks import import_tracks
-from plot_analysis import plot_msd, plot_XYprojection, plot_alpha_multiple, diffusion_plot_multiple, diffusion_plot_BT_LN
+from plot_analysis import ( 
+        plot_msd, 
+        plot_XYprojection, 
+        plot_alpha_multiple, 
+        plot_alpha_BT_multiple, 
+        diffusion_plot_multiple, 
+        diffusion_plot_BT_LN,
+        g1_g2
+        )
 
 #%%
 
@@ -145,16 +156,16 @@ for movie in data: #equivalent to data[i]
     for j, m in enumerate(MSD_list):
         MSD_padded[j, :len(m)] = m
     movie["MSD2Dmat_filtered"] = MSD_padded  # shape (N_filtered, max_len)
+    #Computes the mean of all the filtered tracks 
     movie["MSD2Dmean_filtered"] = mean_MSD_filtered(movie) #en um^2 
-    movie["MSD2Dmean_filtered_m2"]  = movie["MSD2Dmeanfiltered"] * 1e-12  # en m²
+    movie["MSD2Dmean_filtered_m2"]  = movie["MSD2Dmean_filtered"] * 1e-12  # en m²
     
     #Computation  of G_elastic and G_loss after filter 
-    MSD_filteredmean = movie["MSD2Dmeanfiltered_m2"] #array
-    MSD_filteredmean = MSD_filteredmean[:168]
+    MSD_filteredmean = movie["MSD2Dmean_filtered_m2"] #array
+    MSD_filteredmean = MSD_filteredmean[1:169]
     dt = movie["dt"]
     
-    omega, G_elastic, G_visc = complex_modulusFFT(MSD_filteredmean, dt, a=0.51e-6)
-    
+    omega, G_elastic, G_visc = complex_modulusLT(MSD_filteredmean, dt=0.03, a=0.255e-6, degree=5)
     movie["omega"] = omega
     movie["G_elastic"] = G_elastic
     movie["G_viscous"] = G_visc
@@ -170,10 +181,12 @@ plot_XYprojection(data)
 plot_msd(data)
 
 #Distribution de alpha 
-plot_alpha_multiple(data)
+plot_alpha_BT_multiple(data)
 
 #Distribution de D 
 diffusion_plot_BT_LN(data)
+
+g1_g2(data)
 
 
 

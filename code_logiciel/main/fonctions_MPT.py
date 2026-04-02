@@ -9,7 +9,9 @@ Created on Mon Feb 23 15:22:14 2026
 import numpy as np;
 import matplotlib.pyplot as plt;
 from scipy.interpolate import interp1d # Import interp1d
-        
+import sympy as sym
+from scipy.integrate import quad
+
 
 """FONCTIONS PRINCIPALES
 """
@@ -269,12 +271,18 @@ def complex_modulusFFT(msd, dt, a):
     kB = 1.380649e-23  # Boltzmann constant
     T = 310 # 37 celsius
     N = len(msd)
-
+    t = dt * np.arange(1, N+1)
+    
+    #Polyfitting the mean MSD 
+    coeffs = np.polyfit(t, msd.T, deg=5) #polynomial coeffs
+    polyn_fction = np.poly1d(coeffs) #polynomial function
+    msd_poly = polyn_fction(t) #evaluation on t
+    
 
     # # One-sided FT of MSD: integrate from 0 to inf
     # # rfft gives the non-negative frequency components
     #MSD after FT : from msd(lag_time)^2 to msd(omega)^2 
-    msd_ft = np.fft.rfft(msd) * dt        # one-sided FT (scaled by dt)
+    msd_ft = np.fft.rfft(msd_poly) * dt        # one-sided FT (scaled by dt)
     freqs  = np.fft.rfftfreq(N, d=dt)
 
     # Avoid division by zero at DC (freq=0)
@@ -314,9 +322,9 @@ def complex_modulusLT(msd, dt, a, degree=5):
     """
     # Fit MSD with a polynomial
     N = len(msd)
-    t = dt*np.arange(N)
-    coeffs = np.polyfit(t, msd, degree)
-    poly = np.poly1d(coeffs)
+    t = dt*np.arange(1, N+1)
+    coeffs = np.polyfit(t, msd.T, 5) #is the transposition necessary?
+    degree = len(coeffs) - 1 
 
     # Define symbolic variables
     tau, s = sym.symbols('tau s', real=True, positive=True)
@@ -324,8 +332,8 @@ def complex_modulusLT(msd, dt, a, degree=5):
     # Construct the polynomial symbolically
     poly_sym = 0
     for i, c in enumerate(coeffs):
-        poly_sym += c * tau**i
-
+        poly_sym += c * tau**(degree-i) #degree-i as polyfit returns coeffs from highest to lowest degree
+        
     # Analytically Laplace transform the polynomial
     msd_laplace = sym.laplace_transform(poly_sym, tau, s, noconds=True)
 
@@ -337,20 +345,65 @@ def complex_modulusLT(msd, dt, a, degree=5):
     
     # Prepare arrays for G' and G''
     mid = np.int32(N/2)
-    freqs = fftfreq(N, dt)
-    omega = 2 * np.pi * freqs
-    omega = omega[1:mid]
+    freqs = np.fft.fftfreq(N, dt) #Decomposition of the oscillation of the particle 
+    omega = 2 * np.pi * freqs 
+    omega = omega[1:mid] #exclusion of all the negative values by slicing 
     G1 = np.zeros_like(omega)
     G2 = np.zeros_like(omega)
 
     for i, w in enumerate(omega):
-        # Substitute s = i*w
+        # Substitute of s by i*w, w = omega[i]
         G_star_iw = G_star_laplace.subs(s, 1j*w)
         # Extract real and imaginary parts
         G1[i] = sym.re(G_star_iw)
         G2[i] = -sym.im(G_star_iw)  # Note the minus sign for G''
 
     return omega, G1, G2
+
+
+def numerical_LT(msd, dt, omega_range):
+    """
+    Computes numerical Laplace transform of the MSD.
+    
+    Parameters : 
+        msd         : array of the mean MSD 2D (m²)
+        dt          : time step (s)
+        omega_range : array of angular frequencies (rad/s)
+      
+    Returns : 
+        omega_range : angular frequencies (rad/s)
+        G1          : elastic/storage modulus (Pa)
+        G2          : viscous/loss modulus (Pa)
+    """
+    kB = 1.380649e-23
+    T  = 310
+    a  = 0.255e-6
+    
+    N = len(msd)
+    t = dt * np.arange(1, N + 1)  # commence à dt, évite t=0
+    
+    G1 = np.zeros_like(omega_range)
+    G2 = np.zeros_like(omega_range)
+    
+    for k, w in enumerate(omega_range):
+        s = 1j * w  # s = iω sur l'axe imaginaire
+        
+        # Noyau de Laplace : e^(-iωt) = e^(-st)
+        integrand_real = lambda t_val: np.interp(t_val, t, msd) * np.exp(-1j * w * t_val)
+        
+        # Intégration numérique (parties réelle et imaginaire séparément)
+        real_part, _ = quad(lambda t_val: np.real(integrand_real(t_val)), t[0], t[-1])
+        imag_part, _ = quad(lambda t_val: np.imag(integrand_real(t_val)), t[0], t[-1])
+        
+        msd_LT = real_part + 1j * imag_part  # transformée complexe
+        
+        # GSER : G*(iω) = kT / (π * a * iω * L{MSD}(iω))
+        G_star = (kB * T) / (np.pi * a * s * msd_LT)
+        
+        G1[k] = np.real(G_star)
+        G2[k] = np.imag(G_star)
+    
+    return omega_range, G1, G2
 
 
 

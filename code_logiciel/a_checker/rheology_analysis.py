@@ -107,11 +107,6 @@ def KK_check_PV(omega_0, omega_arr, G_doubleprime_arr):
 #     traj['G1']=G1
 #     traj['G2']=G2
 #     print(traj['id'])
-    
-
-
-
-
 
 
 def complex_modulusLT(msd, dt, a, degree=5):
@@ -148,7 +143,7 @@ def complex_modulusLT(msd, dt, a, degree=5):
     # Construct the polynomial symbolically
     poly_sym = 0
     for i, c in enumerate(coeffs):
-        poly_sym += c * tau**i
+        poly_sym += c * tau**(5-i)
 
     # Analytically Laplace transform the polynomial
     msd_laplace = sym.laplace_transform(poly_sym, tau, s, noconds=True)
@@ -175,6 +170,8 @@ def complex_modulusLT(msd, dt, a, degree=5):
         G2[i] = -sym.im(G_star_iw)  # Note the minus sign for G''
 
     return omega, G1, G2
+
+
 
 
 def confinment_radius(msd, dt, a):
