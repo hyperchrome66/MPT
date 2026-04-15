@@ -21,7 +21,8 @@ from fonctions_MPT import (
    gyradius, 
    alphaCoeff, 
    asp_ratio,
-   complex_modulusFFT
+   complex_modulusFFT,
+   confinement_radius
    )
 
         
@@ -90,13 +91,14 @@ def import_tracks(name):
         ngap= sum(np.isnan(x)) #somme du nombre de sauts de frames 
         
         #CALCUL DU MSD 
-        #Appel des fonctions MSD2, alphaCoeff, diffCoeff, gyradius, asp_ratio, complex_modulus_FFT
+        #Appel des fonctions MSD2, alphaCoeff, diffCoeff, gyradius, asp_ratio, confinement_radius
         msd2D = MSD2(x,y); 
         alpha2 = alphaCoeff(msd2D);        
         slope, err2 = diffCoeff(dt, msd2D); 
         D2 = slope/4; #diffusion à 2 dimensions 
         gyr = gyradius(x,y,z);
         aspect_ratio, lambda_1, lambda_2 = asp_ratio(x, y)
+        pore_size = confinement_radius(msd2D, dt,  a=0.255e-6)
 
         #alphaTime, DeffTime = MSDtime(msd3D, dt, 10)  # sliding window fit alpha dn Deff (3D only)
 
@@ -108,10 +110,10 @@ def import_tracks(name):
                 "dt":dt, "nspots": len(x),"xmean": xmean, "ymean": ymean,  "zmean": zmean, "rmean": rmean,
                 "qmean": qmean, "ngap": ngap,
                 "MSD2D": msd2D, "alpha2": alpha2, "D2": D2, "err2": err2, "gyradius": gyr, 
-                "aspect_ratio" : aspect_ratio, "lambda_1" : lambda_1, "lambda_2" : lambda_2
+                "aspect_ratio" : aspect_ratio, "lambda_1" : lambda_1, "lambda_2" : lambda_2,
+                "pore_size" : pore_size
                 }
             k=k+1;
         print(k) #affiche le nombre de trajectoires
     return tracks
-
 

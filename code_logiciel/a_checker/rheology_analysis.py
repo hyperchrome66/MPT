@@ -172,9 +172,7 @@ def complex_modulusLT(msd, dt, a, degree=5):
     return omega, G1, G2
 
 
-
-
-def confinment_radius(msd, dt, a):
+def confinement_radius(msd, dt, a):
     alphatime, Dtime = MSDtime(msd, dt,10)
     idx=np.where(alphatime<0.1)[0] # to be checked
     if idx.size>0:

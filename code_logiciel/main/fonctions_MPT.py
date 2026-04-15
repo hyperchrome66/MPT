@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt;
 from scipy.interpolate import interp1d # Import interp1d
 import sympy as sym
 from scipy.integrate import quad
-
+from scipy.optimize import curve_fit
 
 """FONCTIONS PRINCIPALES
 """
@@ -48,13 +48,16 @@ def diffCoeff(dt, msd2D):
     else:
         return 0, 0
 
-#calcule le coeff alpha sur l'ensemble de la trajectoire 
+#calcule le coeff alpha sur les premiers 2/3 de la trajectoire 
 def alphaCoeff(msd2D):
     if (~np.isnan(msd2D[0])):
-        x=np.array(list(range(1,len(msd2D))))
-        x = np.where(x <= 0, 1e-10, x)  # Replace 0 or negative values with a small number
-        msd2D[1:] = np.where(msd2D[1:] <= 0, 1e-10, msd2D[1:])
-        slope, intercept = np.polyfit(np.log(x), np.log(msd2D[1:]), 1)
+        msd=msd2D.copy()
+       # x = np.where(x <= 0, 1e-10, x)  # Replace 0 or negative values with a small number
+        msd[1:] = np.where(msd[1:] <= 0, 1e-10, msd[1:])
+        finalpha = int(2*len(msd)/3)
+        msd=msd[1:finalpha]
+        x=np.array(list(range(1,len(msd)+1)))
+        slope, intercept = np.polyfit(np.log(x), np.log(msd), 1)
         return slope
     else: 
         return 0
@@ -166,11 +169,12 @@ def driftCorrectTrack(data,selMovie, doPlot):
 
 #Interpolation des MSD lorsque pris à diff temps 
 def MSDinterp(data):
-    for movie  in data:
+    for movie in data:
         msdMean=np.nanmean(movie["MSDmat"],axis=0)
         tracks = movie["tracks"]
-        timeMax = len(msdMean)*movie["dt"]
-        timeOri = np.arange(0, timeMax, movie["dt"])   # time original
+        dt = movie["dt"]
+        N = len(msdMean)
+        timeOri = dt * np.arange(N)  # time original
         timeInt = np.arange(0, max(timeOri), 10) # time where I want to sample
         interpolator = interp1d(timeOri, msdMean, kind='quadratic')  # Linear interpolation function
         MSDMeanInt = interpolator(timeInt) # MSD interpolated
@@ -321,6 +325,8 @@ def complex_modulusLT(msd, dt, a, degree=5):
     - T: temperature (K)
     """
     # Fit MSD with a polynomial
+    finalpha = int(2*len(msd)/3)
+    msd=msd[1:finalpha]
     N = len(msd)
     t = dt*np.arange(1, N+1)
     coeffs = np.polyfit(t, msd.T, 5) #is the transposition necessary?
@@ -405,6 +411,70 @@ def numerical_LT(msd, dt, omega_range):
     
     return omega_range, G1, G2
 
+def complex_modulus_analytic_continuation(msd, dt, a, degree=4):
+    """
+    Compute G' and G'' using analytic continuation (Mason & Weitz 1995).
+    
+    1. Compute G(s) for real s via GSER
+    2. Fit G(s) with a rational function
+    3. Substitute s → iω to get G*(ω)
+    
+    Parameters:
+        msd    : mean MSD array (m²)
+        dt     : time step (s)
+        a      : particle radius (m)
+        degree : degree of the polynomial fit
+    
+    Returns:
+        omega  : angular frequency array (rad/s)
+        G1     : storage modulus G' (Pa)
+        G2     : loss modulus G'' (Pa)
+    """
+    kB = 1.380649e-23
+    T  = 310
+    N  = len(msd)
+    t  = dt * np.arange(1, N + 1)
+    
+    # ── Step 1 : Calcul de G(s) pour s réel ──────────────────────────────
+    # On utilise s réels positifs (pas iω)
+    s_real = 1 / t  # s réel ~ 1/t (approximation de Laplace)
+    
+    # Fit polynomial du MSD en log-log pour lisser
+    log_t   = np.log(t)
+    log_msd = np.log(msd)
+    coeffs  = np.polyfit(log_t, log_msd, degree)
+    msd_smooth = np.exp(np.polyval(coeffs, log_t))
+    
+    # Dérivée logarithmique locale = alpha local
+    alpha_local = np.gradient(np.log(msd_smooth), log_t)
+    
+    # G(s) via GSER pour s réel : G(s) = kT / (π * a * s * L{MSD}(s))
+    # Approximation : s * L{MSD}(s) ≈ msd(t=1/s) * Γ(1 + alpha(s))
+    from scipy.special import gamma
+    Gamma_alpha = gamma(1 + alpha_local)
+    G_real = (kB * T) / (np.pi * a * msd_smooth * Gamma_alpha)
+    
+    # ── Step 2 : Fit de G(s) par une fonction analytique en s réel ───────
+    # On fitte log(G) vs log(s) par un polynôme
+    log_s   = np.log(s_real)
+    log_G   = np.log(np.abs(G_real))
+    coeffs_G = np.polyfit(log_s, log_G, degree)
+    
+    # ── Step 3 : Continuation analytique s → iω ──────────────────────────
+    # Les fréquences accessibles
+    omega = np.logspace(np.log10(s_real[-1]), np.log10(s_real[0]), 200)
+    
+    # Substitution s → iω dans le polynôme fitté
+    # log(G*(iω)) = sum(c_k * log(iω)^k)
+    log_iomega = np.log(1j * omega)  # continuation analytique
+    
+    log_Gstar = np.polyval(coeffs_G, log_iomega)  # évaluation complexe
+    Gstar     = np.exp(log_Gstar)                  # G*(iω) complexe
+    
+    G1 = np.real(Gstar)   # G'(ω) - storage modulus
+    G2 = np.imag(Gstar)   # G''(ω) - loss modulus
+    
+    return omega, G1, G2
 
 
 #Filtre : seuillage 
@@ -477,5 +547,34 @@ def plotAlphaDeff(alpha, msd, Deff,step=5):
     plt.show()
     
     
+    #Computes the confinement radius (pore size) for every particle 
+    """
+    Confinement radius : maximum distance of travel of a particle trapped in a viscoelastic environment 
+    When particle is trapped : MSD reaches a plateau 
     
+    Parameters 
+    
+    msd : array of the MSD (in um^2)
+    dt : in seconds 
+    a : size of the particle ? (in um)
+    R : in um 
+    
+    """
+def confinement_radius(msd, dt, a=0.255e-6):
+    msd[1:] = np.where(msd[1:] <= 0, 1e-10, msd[1:])
+    finalpha = int(2*len(msd)/3)
+    msd=msd[1:finalpha]
+    alphatime, Dtime = MSDtime(msd, dt, 10) #computes the alpha (diffusion regime) and diffusion, 10 corresponds to the time window 
+    
+    #np.where : tuple containing arrays of indexes of elements where alpha < 0.1 
+    idx=np.where(alphatime<0.1)[0] #selects the array (first element) where we find indexes of elements with alpha < 0.1, corresponding to subdiffusion regime
+    if idx.size>0: #check that the array is not empty 
+        idx0=idx[0] #first index in which we have alpha < 0.1
+        
+        #Take the first 30 frames from the beginning of the plateau 
+        idx_end = min(idx0 + 30, len(msd))
+        R=np.sqrt(np.nanmean(msd[idx0:idx_end]))+a
+    else:
+        R=np.nan
+    return R
     

@@ -68,16 +68,15 @@ def plot_XYprojection(data):
 
 # %% ---------------- PLOT MSD EN FONCTION DU TEMPS ------------------------------------
 
-
 def plot_msd(data):
 
     for i in range(len(data)):
 
         fig, ax = plt.subplots(1, 2, layout='constrained')
 
-        m = data[i]["MSD2Dmat_filtered"]
-        frame_time = data[i]["timeOri"]
-        t = data[i]["dt"] * np.arange(0, len(frame_time))
+        m = data[i]["MSD2Dmat_filtered"]      # shape (N_tracks, N_frames)
+        dt = data[i]["dt"]
+        t = dt * np.arange(1, m.shape[1] + 1)  # toujours cohérent avec m
         name = data[i]["name"]
 
         fig.suptitle(name)
@@ -92,8 +91,8 @@ def plot_msd(data):
         ax[1].plot(t[1:], m.T[1:]) #0 element is deleted since it is a log plot
         ax[1].set_xscale("log")
         ax[1].set_yscale("log")
-        ax[1].set_xlabel("log Time (sec)")
-        ax[1].set_ylabel("log MSD")
+        ax[1].set_xlabel("Time (sec) in log scale")
+        ax[1].set_ylabel("MSD (um^2) in log scale")
         ax[1].set_title("Log-Log")
 
         plt.show()
@@ -234,6 +233,35 @@ def plot_alpha_BT_multiple(data):
     plt.show()
     print(all_median)
     
+    #%% -------- PLOT MSD MOYEN ----------- 
+    
+def mean_msd_plot(data): 
+    
+    # Fit MSD with a polynomial
+    
+    for i in range(len(data)): 
+        
+        #plotting real mean MSD and fitted with a polynomial 
+        m = data[i]["MSD2Dmean_filtered"]
+        m = m[1:169]
+        dt = data[i]["dt"]
+        N = len(m)
+        t = dt*np.arange(1, N+1)
+        
+        #fitting
+        coeffs = np.polyfit(t, m.T, 5)
+        degree = len(coeffs) - 1 
+        coeffs = np.polyfit(t, m.T, deg=degree)
+        polyn_fction = np.poly1d(coeffs)
+        
+        #name of the file
+        name = data[i]["name"]
+        
+        plt.title(name)
+        plt.plot(t, m); plt.plot(t, polyn_fction(t), 'r')
+        plt.xlabel("Time (sec)")
+        plt.ylabel("Mean MSD (um^2)")
+        plt.show()
     
     
     # %% --------------------------------- PLOT DIFFUSION MULTIPLE ---------------------------
@@ -832,28 +860,29 @@ def mean_MSD_time(data) :
     
 def g1_g2(data) :
     
-    fig, ax = plt.subplots(1, 2, layout='constrained')
-    
     for i in range(len(data)) : 
+    
+        fig, ax = plt.subplots(1, 2, layout='constrained')
+    
         G1 = data[i]["G_elastic"]
         G2 = data[i]["G_viscous"]
         omega = data[i]["omega"]
         name = data[i]["name"]
         
-        fig.subtitle(name)
+        fig.suptitle(name)
 
    #G_elastic as a function of omega 
    
         ax[0].plot(omega, G1)
         ax[0].set_xlabel("Omega (Hz ?)")
-        ax[0].set.ylabel("G1 (Pa)")
-        ax[0].set_title("Elastic modulus")
+        ax[0].set_ylabel("G1 (Pa)")
+        ax[0].set_title("Storage modulus")
         
     # G loss as a function of omega 
     
         ax[1].plot(omega, G2)
         ax[1].set_xlabel("Omega (Hz?)")
-        ax[1].set.ylabel("G2 (Pa)")
+        ax[1].set_ylabel("G2 (Pa)")
         ax[1].set_title("Loss modulus")
         
         plt.show()
@@ -897,27 +926,3 @@ plt.title("Rayon de gyration par spot")
 plt.show()
     
 """
-# %%----------------------PICKLE-----------------------
-
-# save dictionary
-""""import pickle
-from pathlib import Path    
-path = Path(directory_path)
-cond=path.parent.name
-pkl_path = path / f"{cond}.pkl"  # on définit pkl_path pour la lecture
-with open(directory_path+'/'+cond+'.pkl', 'wb') as file:
-    # Serialize and save the dictionary to the file
-    pickle.dump(data, file) #transforme data en format binaire
-    
- #Réouverture
-root = tk.Tk()
-root.withdraw()  # Hide the root window
-pkl_path = filedialog.askopenfilename() #dialogue 
-
-with open(pkl_path, "rb") as file :
-    data_loaded = pickle.load(file)
-    
-    
-print("Type:", type(data_loaded))
-print('flag3')"""
-

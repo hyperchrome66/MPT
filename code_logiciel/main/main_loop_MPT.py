@@ -25,13 +25,13 @@ from fonctions_MPT import (
    mean_MSD_filtered, 
    complex_modulusFFT, 
    complex_modulusLT,
-   numerical_LT
+   numerical_LT,
+   complex_modulus_analytic_continuation
    )
 from fonction_import_tracks import import_tracks
 from plot_analysis import ( 
         plot_msd, 
         plot_XYprojection, 
-        plot_alpha_multiple, 
         plot_alpha_BT_multiple, 
         diffusion_plot_multiple, 
         diffusion_plot_BT_LN,
@@ -74,6 +74,8 @@ for filename in os.listdir(directory_path):
             zone_LN = "B"
         elif ("zoneT" in filename) or ("Tzone" in filename) or ("zone_T" in filename):
             zone_LN = "T"
+        elif ("noLN" in filename):
+            zone_LN = "No LN"
         else:
             zone_LN = "Unknown"
             
@@ -86,6 +88,8 @@ for filename in os.listdir(directory_path):
            type_LN = "Mesenteric"
         elif ("mand" in filename) or ("mandibulaire" in filename):
            type_LN = "Mandibular"
+        elif ("noLN" in filename):
+            type_LN = "No LN"
         else : 
             type_LN = "Unknown"
             
@@ -97,7 +101,7 @@ for filename in os.listdir(directory_path):
         #Precise if it is stimulated or not 
         if ("CTRL" in filename) : 
             condition = "Control"
-        elif ("STIM" in filename) : 
+        elif ("STIM" in filename) or ("stim" in filename) : 
             condition = "Stimulated"
         else : 
             condition = "Unknown"
@@ -133,6 +137,7 @@ for i, movie in enumerate(data):
     movie["aspect_ratio"] = np.array([trk["aspect_ratio"] for trk in tracks.values()]);
     movie["lambda_1"] = np.array([trk["lambda_1"] for trk in tracks.values()]);
     movie["lambda_2"] = np.array([trk["lambda_2"] for trk in tracks.values()]);
+    movie["pore_size"] = np.array([trk["pore_size"] for trk in tracks.values()])
 
 data=MSDinterp(data)    
 
@@ -145,6 +150,7 @@ for movie in data: #equivalent to data[i]
     movie["aspect_ratio_filtered"] = np.array([trk["aspect_ratio"] for trk in filtered_tracks.values()])
     movie["lambda_1_filtered"]     = np.array([trk["lambda_1"]     for trk in filtered_tracks.values()])
     movie["lambda_2_filtered"]     = np.array([trk["lambda_2"]     for trk in filtered_tracks.values()])
+    movie["pore_size_filtered"]    = np.array([trk["pore_size"]    for trk in filtered_tracks.values()])
     movie["numTracks_filtered"]    = len(filtered_tracks)
 # MSD2D de chaque trajectoire filtrée → shape (N_filtered, 499)
       # MSD2D avec padding NaN pour trajectoires de longueurs différentes
@@ -162,10 +168,11 @@ for movie in data: #equivalent to data[i]
     
     #Computation  of G_elastic and G_loss after filter 
     MSD_filteredmean = movie["MSD2Dmean_filtered_m2"] #array
-    MSD_filteredmean = MSD_filteredmean[1:169]
+    finalpha = int(2*len(MSD_filteredmean)/3)
+    MSD_filteredmean=MSD_filteredmean[1:finalpha]
     dt = movie["dt"]
     
-    omega, G_elastic, G_visc = complex_modulusLT(MSD_filteredmean, dt=0.03, a=0.255e-6, degree=5)
+    omega, G_elastic, G_visc = complex_modulusLT(MSD_filteredmean, dt = 0.03, a=0.255e-6, degree=4)
     movie["omega"] = omega
     movie["G_elastic"] = G_elastic
     movie["G_viscous"] = G_visc
@@ -175,7 +182,7 @@ print('flag2')
 # %% -- ANALYSIS // PLOTS -- 
 
 #XY PROJECTION 
-plot_XYprojection(data)
+#plot_XYprojection(data)
 
 #MSD OVER TIME 
 plot_msd(data)
